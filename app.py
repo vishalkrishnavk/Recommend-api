@@ -1,47 +1,86 @@
-from flask import Flask,render_template,request
-import pickle
+import pymongo
+import pandas as pd
 import numpy as np
+from flask import Flask, jsonify, request
+from sklearn.metrics.pairwise import cosine_similarity
+import pickle
+from flask_cors import CORS
+from dotenv import dotenv_values
 
-popular_df = pickle.load(open('popular.pkl','rb'))
-pt = pickle.load(open('pt.pkl','rb'))
-books = pickle.load(open('books.pkl','rb'))
-similarity_scores = pickle.load(open('similarity_scores.pkl','rb'))
 
+config = dotenv_values(".env")
+
+MONGO_URL = config.get("MONGO_URL")
+
+try:
+    client = pymongo.MongoClient(MONGO_URL)
+    db = client["main_book"]
+    db.command("ping")
+    print("✅ Successfully connected to MongoDB!")
+except Exception as e:
+    print(f"❌ MongoDB Connection Error: {e}")
+
+books_collection = db["books"]
+ratings_collection = db["ratings"]
+
+books_df = pd.DataFrame(list(books_collection.find({}, {"_id": 0})))
+ratings_df = pd.DataFrame(list(ratings_collection.find({}, {"_id": 0})))
+
+overall_data = ratings_df.merge(books_df, on="ISBN")
+
+num_ratings = overall_data.groupby("title")["rating"].count()
+avg_ratings = overall_data.groupby("title")["rating"].mean()
+popular_books = pd.DataFrame({"num_ratings": num_ratings, "avg_rating": avg_ratings})
+popular_books = (
+    popular_books[popular_books["num_ratings"] >= 250]
+    .sort_values("avg_rating", ascending=False)
+    .head(50)
+)
+popular_books = popular_books.merge(books_df, on="title").drop_duplicates("title")
+popular_books = popular_books[["title", "author", "url", "num_ratings", "avg_rating"]]
+
+active_users = overall_data.groupby("userID")["rating"].count()
+active_users = active_users[active_users >= 100].index
+filtered_ratings = overall_data[overall_data["userID"].isin(active_users)]
+print(f"Filtered ratings shape: {filtered_ratings.shape}")
+
+
+frequent_books = filtered_ratings.groupby("title")["rating"].count()
+frequent_books = frequent_books[frequent_books >= 20].index
+final_ratings = filtered_ratings[filtered_ratings["title"].isin(frequent_books)]
+print(f"Final ratings shape: {final_ratings.shape}")
+
+
+pt = final_ratings.pivot_table(index="title", columns="userID", values="rating").fillna(0)
+print(f"Pivot table shape: {pt.shape}")
+
+
+similarity_scores = cosine_similarity(pt)
+
+pickle.dump(pt, open("pt.pkl", "wb"))
+pickle.dump(similarity_scores, open("similarity_scores.pkl", "wb"))
+
+# ✅ Flask App
 app = Flask(__name__)
-
-@app.route('/')
-def index():
-    return render_template('index.html',
-                           book_name = list(popular_df['Book-Title'].values),
-                           author=list(popular_df['Book-Author'].values),
-                           image=list(popular_df['Image-URL-M'].values),
-                           votes=list(popular_df['num_ratings'].values),
-                           rating=list(popular_df['avg_rating'].values)
-                           )
-
-@app.route('/recommend')
-def recommend_ui():
-    return render_template('recommend.html')
-
-@app.route('/recommend_books',methods=['post'])
+CORS(app, resources={r"/*": {"origins": ["http://localhost:3001", "http://localhost:5173"]}})
+@app.route("/recommend", methods=["GET"])
 def recommend():
-    user_input = request.form.get('user_input')
-    index = np.where(pt.index == user_input)[0][0]
-    similar_items = sorted(list(enumerate(similarity_scores[index])), key=lambda x: x[1], reverse=True)[1:5]
+    book_name = request.args.get("title")
+    if book_name not in pt.index:
+        return jsonify({"error": "Book not found"}), 404
+    
+    index = np.where(pt.index == book_name)[0][0]
+    similar_books = sorted(
+        list(enumerate(similarity_scores[index])), key=lambda x: x[1], reverse=True
+    )[1:10]  
 
-    data = []
-    for i in similar_items:
-        item = []
-        temp_df = books[books['Book-Title'] == pt.index[i[0]]]
-        item.extend(list(temp_df.drop_duplicates('Book-Title')['Book-Title'].values))
-        item.extend(list(temp_df.drop_duplicates('Book-Title')['Book-Author'].values))
-        item.extend(list(temp_df.drop_duplicates('Book-Title')['Image-URL-M'].values))
+    recommendations = []
+    for i in similar_books:
+        temp_df = books_df[books_df["title"] == pt.index[i[0]]]
+        book_info = temp_df[["title", "author", "url", "price"]].drop_duplicates("title").to_dict(orient="records")[0]
+        recommendations.append(book_info)
+    
+    return jsonify({"recommendations": recommendations})
 
-        data.append(item)
-
-    print(data)
-
-    return render_template('recommend.html',data=data)
-
-if __name__ == '__main__':
-    app.run(debug=True)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5001, debug=True)
