@@ -1,20 +1,20 @@
 import pymongo
+import random
 import pandas as pd
 import numpy as np
 from flask import Flask, jsonify, request
 from sklearn.metrics.pairwise import cosine_similarity
-import pickle
 from flask_cors import CORS
 from dotenv import dotenv_values
 
 
 config = dotenv_values(".env")
 
-MONGO_URL = config.get("MONGO_URL")
+MONGO_URL2 = config.get("MONGO_URL2")
 
 try:
-    client = pymongo.MongoClient(MONGO_URL)
-    db = client["main_book"]
+    client = pymongo.MongoClient(MONGO_URL2)
+    db = client["book-verse"]
     db.command("ping")
     print("✅ Successfully connected to MongoDB!")
 except Exception as e:
@@ -23,8 +23,10 @@ except Exception as e:
 books_collection = db["books"]
 ratings_collection = db["ratings"]
 
+
 books_df = pd.DataFrame(list(books_collection.find({}, {"_id": 0})))
 ratings_df = pd.DataFrame(list(ratings_collection.find({}, {"_id": 0})))
+
 
 overall_data = ratings_df.merge(books_df, on="ISBN")
 
@@ -57,12 +59,9 @@ print(f"Pivot table shape: {pt.shape}")
 
 similarity_scores = cosine_similarity(pt)
 
-pickle.dump(pt, open("pt.pkl", "wb"))
-pickle.dump(similarity_scores, open("similarity_scores.pkl", "wb"))
-
 # ✅ Flask App
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": ["http://localhost:3001", "http://localhost:5173"]}})
+CORS(app, resources={r"/*": {"origins": ["http://localhost:3000", "http://localhost:8800"]}})
 @app.route("/recommend", methods=["GET"])
 def recommend():
     book_name = request.args.get("title")
@@ -84,3 +83,10 @@ def recommend():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5001, debug=True)
+
+
+
+# Load environment variables
+
+# Initialize Flask App
+
