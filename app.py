@@ -5,13 +5,17 @@ import numpy as np
 from flask import Flask, jsonify, request
 from sklearn.metrics.pairwise import cosine_similarity
 from flask_cors import CORS
-from dotenv import dotenv_values
+from dotenv import load_dotenv
+import os
 
+load_dotenv()  # Load environment variables from .env (for local use)
 
-config = dotenv_values(".env")
+MONGO_URL2 = os.getenv("MONGO_URL2")
 
-MONGO_URL2 = config.get("MONGO_URL2")
-PORT = config.get("PORT")
+""" config = dotenv_values(".env")
+
+MONGO_URL2 = config.get("MONGO_URL2") """
+PORT = os.getenv("PORT")
 
 try:
     client = pymongo.MongoClient(MONGO_URL2)

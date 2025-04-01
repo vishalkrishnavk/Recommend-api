@@ -6,4 +6,4 @@ pymongo
 scikit-learn
 flask-cors
 python-dotenv
-dotenv
+os
