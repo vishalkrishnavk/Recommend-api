@@ -2,11 +2,7 @@ flask
 numpy
 pandas
 gunicorn
-
-import pymongo
-import pandas as pd
-import numpy as np
-from flask import Flask, jsonify, request
-from sklearn.metrics.pairwise import cosine_similarity
-import pickle
-from flask_cors import CORS
+pymongo
+scikit-learn
+flask-cors
+python-dotenv
