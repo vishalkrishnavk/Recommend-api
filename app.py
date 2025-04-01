@@ -11,6 +11,7 @@ from dotenv import dotenv_values
 config = dotenv_values(".env")
 
 MONGO_URL2 = config.get("MONGO_URL2")
+PORT = config.get("PORT")
 
 try:
     client = pymongo.MongoClient(MONGO_URL2)
@@ -82,4 +83,4 @@ def recommend():
     return jsonify({"recommendations": recommendations})
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5001, debug=True)
+    app.run(host="0.0.0.0", PORT, debug=True)
